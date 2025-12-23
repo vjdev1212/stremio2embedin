@@ -148,12 +148,16 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    const m3u8Content = streamsToM3U8(data.streams, `Movie ${imdb}`);
+    // Get the first stream URL
+    const firstStream = data.streams[0];
+    if (!firstStream.url) {
+      return reply.code(404).send({
+        error: 'No valid URL found in streams'
+      });
+    }
 
-    reply
-      .header('Content-Type', 'application/vnd.apple.mpegurl')
-      .header('Content-Disposition', `attachment; filename="${imdb}.m3u8"`)
-      .send(m3u8Content);
+    // Redirect to the first stream URL
+    return reply.redirect(302, firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -192,15 +196,16 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    const m3u8Content = streamsToM3U8(
-      data.streams, 
-      `TV Show ${imdb} S${season}E${episode}`
-    );
+    // Get the first stream URL
+    const firstStream = data.streams[0];
+    if (!firstStream.url) {
+      return reply.code(404).send({
+        error: 'No valid URL found in streams'
+      });
+    }
 
-    reply
-      .header('Content-Type', 'application/vnd.apple.mpegurl')
-      .header('Content-Disposition', `attachment; filename="${imdb}_S${season}E${episode}.m3u8"`)
-      .send(m3u8Content);
+    // Redirect to the first stream URL
+    return reply.redirect(302, firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
