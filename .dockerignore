@@ -1,0 +1,50 @@
+# Node.js dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+*.lock
+
+# Logs
+logs
+*.log
+
+# Temporary files and folders
+tmp
+temp
+*.tmp
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode
+.idea
+*.swp
+
+# Git files
+.git
+.gitignore
+
+# Environment and configuration files
+.env
+.env.local
+.env.*.local
+
+# Docker-related files
+.dockerignore
+Dockerfile*
+
+# Test files and coverage reports
+coverage
+tests
+__tests__
+*.spec.js
+*.test.js
+
+# Build output (if applicable)
+build
+dist
+public
+vercel.json
+.vs

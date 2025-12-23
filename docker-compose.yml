@@ -1,0 +1,16 @@
+name: 'stremio2embedin'
+version: '3'
+services:
+  stremio2embedin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vjdev1212/stremio2embedin:latest
+    container_name: stremio2embedin
+    ports:
+      - "3000:80"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - MANIFEST_URL=MANIFEST_URL
+    restart: always

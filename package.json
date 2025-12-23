@@ -1,0 +1,27 @@
+{
+  "name": "stremio2embedin",
+  "description": "EmbedIN Wrapper for Stremio Addons",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "node index.js",
+    "start": "node index.js",
+    "deploy": "vercel",
+    "dev": "nodemon index.js",
+    "docker-push:latest": "docker buildx build --tag=vjdev1212/stremio2embedin:latest --platform=linux/arm64,linux/amd64 --push ."
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.2.2",
+    "lru-cache": "^11.0.2",
+    "node-fetch": "^3.3.2",
+    "nodemon": "^3.1.4",
+    "stremio-addon-sdk": "^0.7.1",
+    "torrent-name-parser": "^0.6.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "vercel": "^32.3.0"
+  }
+}
