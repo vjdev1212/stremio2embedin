@@ -148,19 +148,12 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Find the first MP4 stream
-    const mp4Stream = data.streams.find(stream => 
-      stream.url && stream.url.toLowerCase().endsWith('.mp4')
-    );
+    const m3u8Content = streamsToM3U8(data.streams, `Movie ${imdb}`);
 
-    if (!mp4Stream) {
-      return reply.code(404).send({
-        error: 'No MP4 streams found for this movie'
-      });
-    }
-
-    // Redirect to the first MP4 stream URL
-    return reply.redirect(mp4Stream.url, 302);
+    reply
+      .header('Content-Type', 'application/vnd.apple.mpegurl')
+      .header('Content-Disposition', `attachment; filename="${imdb}.m3u8"`)
+      .send(m3u8Content);
 
   } catch (error) {
     fastify.log.error(error);
@@ -199,19 +192,15 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Find the first MP4 stream
-    const mp4Stream = data.streams.find(stream => 
-      stream.url && stream.url.toLowerCase().endsWith('.mp4')
+    const m3u8Content = streamsToM3U8(
+      data.streams, 
+      `TV Show ${imdb} S${season}E${episode}`
     );
 
-    if (!mp4Stream) {
-      return reply.code(404).send({
-        error: 'No MP4 streams found for this episode'
-      });
-    }
-
-    // Redirect to the first MP4 stream URL
-    return reply.redirect(mp4Stream.url, 302);
+    reply
+      .header('Content-Type', 'application/vnd.apple.mpegurl')
+      .header('Content-Disposition', `attachment; filename="${imdb}_S${season}E${episode}.m3u8"`)
+      .send(m3u8Content);
 
   } catch (error) {
     fastify.log.error(error);
