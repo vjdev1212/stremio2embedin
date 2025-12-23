@@ -148,15 +148,19 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Get the first stream URL
-    const firstStream = data.streams[0];
-    if (!firstStream.url) {
+    // Find the first MP4 stream
+    const mp4Stream = data.streams.find(stream => 
+      stream.url && stream.url.toLowerCase().endsWith('.mp4')
+    );
+
+    if (!mp4Stream) {
       return reply.code(404).send({
-        error: 'No valid URL found in streams'
+        error: 'No MP4 streams found for this movie'
       });
     }
 
-    return reply.redirect(firstStream.url, 302);
+    // Redirect to the first MP4 stream URL
+    return reply.redirect(mp4Stream.url, 302);
 
   } catch (error) {
     fastify.log.error(error);
@@ -195,16 +199,19 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Get the first stream URL
-    const firstStream = data.streams[0];
-    if (!firstStream.url) {
+    // Find the first MP4 stream
+    const mp4Stream = data.streams.find(stream => 
+      stream.url && stream.url.toLowerCase().endsWith('.mp4')
+    );
+
+    if (!mp4Stream) {
       return reply.code(404).send({
-        error: 'No valid URL found in streams'
+        error: 'No MP4 streams found for this episode'
       });
     }
 
-    // Redirect to the first stream URL - FIXED: correct parameter order
-    return reply.redirect(firstStream.url, 302);
+    // Redirect to the first MP4 stream URL
+    return reply.redirect(mp4Stream.url, 302);
 
   } catch (error) {
     fastify.log.error(error);
