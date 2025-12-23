@@ -156,8 +156,7 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Redirect to the first stream URL
-    return reply.redirect(302, firstStream.url);
+    return reply.redirect(firstStream.url, 302);
 
   } catch (error) {
     fastify.log.error(error);
@@ -204,8 +203,8 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Redirect to the first stream URL
-    return reply.redirect(302, firstStream.url);
+    // Redirect to the first stream URL - FIXED: correct parameter order
+    return reply.redirect(firstStream.url, 302);
 
   } catch (error) {
     fastify.log.error(error);
