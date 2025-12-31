@@ -71,291 +71,6 @@ async function fetchStremioStreams(streamUrl) {
   }
 }
 
-// Helper function to generate HTML stream selector page
-function generateStreamSelectorHTML(streams, title = 'Select Stream') {
-  const streamOptions = streams.map((stream, index) => {
-    const streamTitle = stream.title || stream.name || `Stream ${index + 1}`;
-    const streamName = stream.name || 'Unknown Source';
-    return {
-      index,
-      title: streamTitle,
-      name: streamName,
-      url: stream.url
-    };
-  });
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta charset="UTF-8">
-  <title>${title}</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      background: #0a0a0a;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #fff;
-      min-height: 100vh;
-    }
-    #container {
-      max-width: 100%;
-      margin: 0 auto;
-    }
-    #video-container {
-      width: 100%;
-      aspect-ratio: 16/9;
-      background: #000;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000;
-    }
-    #stream-selector {
-      padding: 20px;
-    }
-    #stream-selector h2 {
-      font-size: 20px;
-      margin-bottom: 15px;
-      font-weight: 600;
-    }
-    .stream-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .stream-item {
-      background: #1a1a1a;
-      border: 2px solid #2a2a2a;
-      border-radius: 8px;
-      padding: 15px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .stream-item:hover {
-      background: #252525;
-      border-color: #3a3a3a;
-    }
-    .stream-item.active {
-      background: #1a3a5a;
-      border-color: #2a5a8a;
-    }
-    .stream-title {
-      font-size: 16px;
-      font-weight: 500;
-      margin-bottom: 5px;
-    }
-    .stream-source {
-      font-size: 13px;
-      color: #888;
-    }
-    #loading {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      font-size: 18px;
-      text-align: center;
-    }
-    .spinner {
-      border: 4px solid rgba(255, 255, 255, 0.3);
-      border-top: 4px solid white;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 15px;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    #error {
-      display: none;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #ff4444;
-      font-size: 16px;
-      text-align: center;
-      padding: 20px;
-      max-width: 80%;
-    }
-    #placeholder {
-      color: #666;
-      font-size: 16px;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div id="container">
-    <div id="video-container">
-      <div id="placeholder">
-        <div style="font-size: 48px; margin-bottom: 10px;">🎬</div>
-        <div>Select a stream below to start playing</div>
-      </div>
-      <div id="loading" style="display: none;">
-        <div class="spinner"></div>
-        <div>Loading video...</div>
-      </div>
-      <div id="error">
-        <div style="font-size: 48px; margin-bottom: 10px;">⚠️</div>
-        <div id="error-message">Failed to load video</div>
-      </div>
-      <video id="video" 
-             style="display: none;"
-             controls 
-             autoplay 
-             playsinline 
-             preload="auto"
-             controlsList="nodownload">
-        Your browser does not support the video tag.
-      </video>
-    </div>
-
-    <div id="stream-selector">
-      <h2>Available Streams</h2>
-      <div class="stream-list" id="stream-list">
-        ${streamOptions.map(stream => `
-          <div class="stream-item" data-url="${stream.url}" data-index="${stream.index}">
-            <div class="stream-title">${stream.title}</div>
-            <div class="stream-source">${stream.name}</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const video = document.getElementById('video');
-    const loading = document.getElementById('loading');
-    const error = document.getElementById('error');
-    const errorMessage = document.getElementById('error-message');
-    const placeholder = document.getElementById('placeholder');
-    const streamItems = document.querySelectorAll('.stream-item');
-
-    let currentStreamIndex = null;
-
-    // Function to load a stream
-    function loadStream(url, index) {
-      // Update active state
-      streamItems.forEach(item => item.classList.remove('active'));
-      streamItems[index].classList.add('active');
-
-      // Show loading
-      placeholder.style.display = 'none';
-      error.style.display = 'none';
-      loading.style.display = 'block';
-      video.style.display = 'block';
-
-      // Clear previous sources
-      video.innerHTML = '';
-
-      // Add new source
-      const source = document.createElement('source');
-      source.src = url;
-      source.type = 'video/mp4';
-      video.appendChild(source);
-
-      // Try loading
-      video.load();
-      currentStreamIndex = index;
-    }
-
-    // Add click handlers to stream items
-    streamItems.forEach((item, index) => {
-      item.addEventListener('click', () => {
-        const url = item.dataset.url;
-        loadStream(url, index);
-      });
-    });
-
-    // Hide loading when video can play
-    video.addEventListener('loadeddata', () => {
-      loading.style.display = 'none';
-    });
-
-    video.addEventListener('canplay', () => {
-      loading.style.display = 'none';
-    });
-
-    // Show error if video fails to load
-    video.addEventListener('error', (e) => {
-      loading.style.display = 'none';
-      error.style.display = 'block';
-      
-      const errorCode = video.error ? video.error.code : 'unknown';
-      const errorText = video.error ? video.error.message : 'Unknown error';
-      
-      errorMessage.innerHTML = \`Failed to load video<br><small style="font-size: 12px; opacity: 0.7;">Error: \${errorText}</small>\`;
-    });
-
-    // Prevent context menu on long press
-    video.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      return false;
-    });
-  </script>
-</body>
-</html>`;
-}
-
-// Helper function to convert streams to M3U8 format
-function streamsToM3U8(streams, title = 'Playlist') {
-  let m3u8Content = '#EXTM3U\n';
-  m3u8Content += '#EXT-X-VERSION:3\n\n';
-
-  if (!streams || streams.length === 0) {
-    return m3u8Content;
-  }
-
-  streams.forEach((stream, index) => {
-    // Extract quality info from title or name
-    const streamTitle = stream.title || stream.name || `Stream ${index + 1}`;
-    const streamName = stream.name || 'Unknown Source';
-    
-    // Parse quality and size from title
-    const qualityMatch = streamTitle.match(/(\d+p)/);
-    const sizeMatch = streamTitle.match(/([\d.]+GB)/);
-    const quality = qualityMatch ? qualityMatch[1] : 'Unknown';
-    const size = sizeMatch ? sizeMatch[1] : '';
-    
-    // Determine bandwidth based on quality (rough estimates)
-    let bandwidth = 5000000; // default 5Mbps
-    if (quality.includes('2160p') || quality.includes('4K')) {
-      bandwidth = 20000000; // 20Mbps for 4K
-    } else if (quality.includes('1080p')) {
-      bandwidth = 8000000; // 8Mbps for 1080p
-    } else if (quality.includes('720p')) {
-      bandwidth = 5000000; // 5Mbps for 720p
-    } else if (quality.includes('480p')) {
-      bandwidth = 2500000; // 2.5Mbps for 480p
-    }
-
-    // Add stream info
-    const displayName = `${streamName} - ${quality}${size ? ' - ' + size : ''}`;
-    
-    m3u8Content += `#EXTINF:-1 tvg-name="${displayName}" group-title="${streamName}",${displayName}\n`;
-    m3u8Content += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}\n`;
-    m3u8Content += `${stream.url}\n\n`;
-  });
-
-  return m3u8Content;
-}
-
 // Middleware to check if addon is configured
 fastify.addHook('preHandler', async (request, reply) => {
   const skipRoutes = ['/', '/health', '/info'];
@@ -373,7 +88,6 @@ fastify.addHook('preHandler', async (request, reply) => {
 fastify.get('/movie/:imdb', async (request, reply) => {
   try {
     const { imdb } = request.params;
-    const { format } = request.query;
     
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
@@ -391,21 +105,9 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Check if format is m3u8 (return playlist)
-    if (format === 'm3u8') {
-      const m3u8Content = streamsToM3U8(data.streams, `Movie ${imdb}`);
-      return reply
-        .header('Content-Type', 'application/vnd.apple.mpegurl')
-        .header('Content-Disposition', `attachment; filename="${imdb}.m3u8"`)
-        .send(m3u8Content);
-    }
-
-    // Default: Return HTML stream selector page
-    const html = generateStreamSelectorHTML(data.streams, `Movie ${imdb}`);
-    
-    return reply
-      .header('Content-Type', 'text/html')
-      .send(html);
+    // Redirect to the first stream URL
+    const firstStream = data.streams[0];
+    return reply.redirect(firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -420,7 +122,6 @@ fastify.get('/movie/:imdb', async (request, reply) => {
 fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
   try {
     const { imdb, season, episode } = request.params;
-    const { format } = request.query;
     
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
@@ -445,27 +146,9 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Check if format is m3u8 (return playlist)
-    if (format === 'm3u8') {
-      const m3u8Content = streamsToM3U8(
-        data.streams, 
-        `TV Show ${imdb} S${season}E${episode}`
-      );
-      return reply
-        .header('Content-Type', 'application/vnd.apple.mpegurl')
-        .header('Content-Disposition', `attachment; filename="${imdb}_S${season}E${episode}.m3u8"`)
-        .send(m3u8Content);
-    }
-
-    // Default: Return HTML stream selector page
-    const html = generateStreamSelectorHTML(
-      data.streams, 
-      `TV Show ${imdb} S${season}E${episode}`
-    );
-    
-    return reply
-      .header('Content-Type', 'text/html')
-      .send(html);
+    // Redirect to the first stream URL
+    const firstStream = data.streams[0];
+    return reply.redirect(firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -504,28 +187,22 @@ fastify.get('/health', async (request, reply) => {
 // Root endpoint with API documentation
 fastify.get('/', async (request, reply) => {
   return {
-    name: 'Stremio to M3U8 API',
+    name: 'Stremio First Stream URL API',
     version: '3.0.0',
-    description: 'Convert Stremio addon streams to M3U8 playlists',
+    description: 'Get the first stream URL from Stremio addon',
     configured: !!ADDON_BASE_URL,
     endpoints: {
       movie: {
         method: 'GET',
         path: '/movie/{imdb}',
         example: '/movie/tt32063098',
-        queryParams: {
-          format: 'Optional: "m3u8" for playlist file (default: HTML video player)'
-        },
-        returns: 'HTML stream selector page (or M3U8 with ?format=m3u8)'
+        returns: 'Redirects to the first stream URL'
       },
       tv: {
         method: 'GET',
         path: '/tv/{imdb}/{season}/{episode}',
         example: '/tv/tt32063098/1/1',
-        queryParams: {
-          format: 'Optional: "m3u8" for playlist file (default: HTML video player)'
-        },
-        returns: 'HTML stream selector page (or M3U8 with ?format=m3u8)'
+        returns: 'Redirects to the first stream URL'
       },
       info: {
         method: 'GET',
