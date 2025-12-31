@@ -71,8 +71,19 @@ async function fetchStremioStreams(streamUrl) {
   }
 }
 
-// Helper function to generate HTML video player
-function generateVideoPlayerHTML(streamUrl, title = 'Video Player') {
+// Helper function to generate HTML stream selector page
+function generateStreamSelectorHTML(streams, title = 'Select Stream') {
+  const streamOptions = streams.map((stream, index) => {
+    const streamTitle = stream.title || stream.name || `Stream ${index + 1}`;
+    const streamName = stream.name || 'Unknown Source';
+    return {
+      index,
+      title: streamTitle,
+      name: streamName,
+      url: stream.url
+    };
+  });
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -86,23 +97,67 @@ function generateVideoPlayerHTML(streamUrl, title = 'Video Player') {
       box-sizing: border-box;
     }
     body {
-      background: #000;
-      overflow: hidden;
+      background: #0a0a0a;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #fff;
+      min-height: 100vh;
+    }
+    #container {
+      max-width: 100%;
+      margin: 0 auto;
     }
     #video-container {
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #000;
     }
     video {
       width: 100%;
       height: 100%;
       object-fit: contain;
       background: #000;
+    }
+    #stream-selector {
+      padding: 20px;
+    }
+    #stream-selector h2 {
+      font-size: 20px;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+    .stream-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .stream-item {
+      background: #1a1a1a;
+      border: 2px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 15px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .stream-item:hover {
+      background: #252525;
+      border-color: #3a3a3a;
+    }
+    .stream-item.active {
+      background: #1a3a5a;
+      border-color: #2a5a8a;
+    }
+    .stream-title {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 5px;
+    }
+    .stream-source {
+      font-size: 13px;
+      color: #888;
     }
     #loading {
       position: absolute;
@@ -138,29 +193,50 @@ function generateVideoPlayerHTML(streamUrl, title = 'Video Player') {
       padding: 20px;
       max-width: 80%;
     }
+    #placeholder {
+      color: #666;
+      font-size: 16px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
-  <div id="video-container">
-    <div id="loading">
-      <div class="spinner"></div>
-      <div>Loading video...</div>
+  <div id="container">
+    <div id="video-container">
+      <div id="placeholder">
+        <div style="font-size: 48px; margin-bottom: 10px;">🎬</div>
+        <div>Select a stream below to start playing</div>
+      </div>
+      <div id="loading" style="display: none;">
+        <div class="spinner"></div>
+        <div>Loading video...</div>
+      </div>
+      <div id="error">
+        <div style="font-size: 48px; margin-bottom: 10px;">⚠️</div>
+        <div id="error-message">Failed to load video</div>
+      </div>
+      <video id="video" 
+             style="display: none;"
+             controls 
+             autoplay 
+             playsinline 
+             preload="auto"
+             controlsList="nodownload">
+        Your browser does not support the video tag.
+      </video>
     </div>
-    <div id="error">
-      <div style="font-size: 48px; margin-bottom: 10px;">⚠️</div>
-      <div id="error-message">Failed to load video</div>
+
+    <div id="stream-selector">
+      <h2>Available Streams</h2>
+      <div class="stream-list" id="stream-list">
+        ${streamOptions.map(stream => `
+          <div class="stream-item" data-url="${stream.url}" data-index="${stream.index}">
+            <div class="stream-title">${stream.title}</div>
+            <div class="stream-source">${stream.name}</div>
+          </div>
+        `).join('')}
+      </div>
     </div>
-    <video id="video" 
-           controls 
-           autoplay 
-           playsinline 
-           preload="auto"
-           controlsList="nodownload">
-      <source src="${streamUrl}" type="video/mp4">
-      <source src="${streamUrl}" type="video/webm">
-      <source src="${streamUrl}" type="application/x-mpegURL">
-      Your browser does not support the video tag.
-    </video>
   </div>
 
   <script>
@@ -168,6 +244,44 @@ function generateVideoPlayerHTML(streamUrl, title = 'Video Player') {
     const loading = document.getElementById('loading');
     const error = document.getElementById('error');
     const errorMessage = document.getElementById('error-message');
+    const placeholder = document.getElementById('placeholder');
+    const streamItems = document.querySelectorAll('.stream-item');
+
+    let currentStreamIndex = null;
+
+    // Function to load a stream
+    function loadStream(url, index) {
+      // Update active state
+      streamItems.forEach(item => item.classList.remove('active'));
+      streamItems[index].classList.add('active');
+
+      // Show loading
+      placeholder.style.display = 'none';
+      error.style.display = 'none';
+      loading.style.display = 'block';
+      video.style.display = 'block';
+
+      // Clear previous sources
+      video.innerHTML = '';
+
+      // Add new source
+      const source = document.createElement('source');
+      source.src = url;
+      source.type = 'video/mp4';
+      video.appendChild(source);
+
+      // Try loading
+      video.load();
+      currentStreamIndex = index;
+    }
+
+    // Add click handlers to stream items
+    streamItems.forEach((item, index) => {
+      item.addEventListener('click', () => {
+        const url = item.dataset.url;
+        loadStream(url, index);
+      });
+    });
 
     // Hide loading when video can play
     video.addEventListener('loadeddata', () => {
@@ -286,9 +400,8 @@ fastify.get('/movie/:imdb', async (request, reply) => {
         .send(m3u8Content);
     }
 
-    // Default: Return HTML video player with first stream
-    const firstStream = data.streams[0];
-    const html = generateVideoPlayerHTML(firstStream.url, `Movie ${imdb}`);
+    // Default: Return HTML stream selector page
+    const html = generateStreamSelectorHTML(data.streams, `Movie ${imdb}`);
     
     return reply
       .header('Content-Type', 'text/html')
@@ -344,10 +457,9 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
         .send(m3u8Content);
     }
 
-    // Default: Return HTML video player with first stream
-    const firstStream = data.streams[0];
-    const html = generateVideoPlayerHTML(
-      firstStream.url, 
+    // Default: Return HTML stream selector page
+    const html = generateStreamSelectorHTML(
+      data.streams, 
       `TV Show ${imdb} S${season}E${episode}`
     );
     
@@ -404,7 +516,7 @@ fastify.get('/', async (request, reply) => {
         queryParams: {
           format: 'Optional: "m3u8" for playlist file (default: HTML video player)'
         },
-        returns: 'HTML video player page (or M3U8 with ?format=m3u8)'
+        returns: 'HTML stream selector page (or M3U8 with ?format=m3u8)'
       },
       tv: {
         method: 'GET',
@@ -413,7 +525,7 @@ fastify.get('/', async (request, reply) => {
         queryParams: {
           format: 'Optional: "m3u8" for playlist file (default: HTML video player)'
         },
-        returns: 'HTML video player page (or M3U8 with ?format=m3u8)'
+        returns: 'HTML stream selector page (or M3U8 with ?format=m3u8)'
       },
       info: {
         method: 'GET',
