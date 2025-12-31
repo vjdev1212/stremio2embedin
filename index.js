@@ -71,49 +71,6 @@ async function fetchStremioStreams(streamUrl) {
   }
 }
 
-// Helper function to convert streams to M3U8 format
-function streamsToM3U8(streams, title = 'Playlist') {
-  let m3u8Content = '#EXTM3U\n';
-  m3u8Content += '#EXT-X-VERSION:3\n\n';
-
-  if (!streams || streams.length === 0) {
-    return m3u8Content;
-  }
-
-  streams.forEach((stream, index) => {
-    // Extract quality info from title or name
-    const streamTitle = stream.title || stream.name || `Stream ${index + 1}`;
-    const streamName = stream.name || 'Unknown Source';
-    
-    // Parse quality and size from title
-    const qualityMatch = streamTitle.match(/(\d+p)/);
-    const sizeMatch = streamTitle.match(/([\d.]+GB)/);
-    const quality = qualityMatch ? qualityMatch[1] : 'Unknown';
-    const size = sizeMatch ? sizeMatch[1] : '';
-    
-    // Determine bandwidth based on quality (rough estimates)
-    let bandwidth = 5000000; // default 5Mbps
-    if (quality.includes('2160p') || quality.includes('4K')) {
-      bandwidth = 20000000; // 20Mbps for 4K
-    } else if (quality.includes('1080p')) {
-      bandwidth = 8000000; // 8Mbps for 1080p
-    } else if (quality.includes('720p')) {
-      bandwidth = 5000000; // 5Mbps for 720p
-    } else if (quality.includes('480p')) {
-      bandwidth = 2500000; // 2.5Mbps for 480p
-    }
-
-    // Add stream info
-    const displayName = `${streamName} - ${quality}${size ? ' - ' + size : ''}`;
-    
-    m3u8Content += `#EXTINF:-1 tvg-name="${displayName}" group-title="${streamName}",${displayName}\n`;
-    m3u8Content += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}\n`;
-    m3u8Content += `${stream.url}\n\n`;
-  });
-
-  return m3u8Content;
-}
-
 // Middleware to check if addon is configured
 fastify.addHook('preHandler', async (request, reply) => {
   const skipRoutes = ['/', '/health', '/info'];
@@ -148,12 +105,13 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    const m3u8Content = streamsToM3U8(data.streams, `Movie ${imdb}`);
-
-    reply
-      .header('Content-Type', 'application/vnd.apple.mpegurl')
-      .header('Content-Disposition', `attachment; filename="${imdb}.m3u8"`)
-      .send(m3u8Content);
+    // Return the first stream URL
+    const firstStream = data.streams[0];
+    return reply.send({
+      url: firstStream.url,
+      title: firstStream.title || firstStream.name || 'Stream',
+      name: firstStream.name || 'Unknown Source'
+    });
 
   } catch (error) {
     fastify.log.error(error);
@@ -192,15 +150,13 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    const m3u8Content = streamsToM3U8(
-      data.streams, 
-      `TV Show ${imdb} S${season}E${episode}`
-    );
-
-    reply
-      .header('Content-Type', 'application/vnd.apple.mpegurl')
-      .header('Content-Disposition', `attachment; filename="${imdb}_S${season}E${episode}.m3u8"`)
-      .send(m3u8Content);
+    // Return the first stream URL
+    const firstStream = data.streams[0];
+    return reply.send({
+      url: firstStream.url,
+      title: firstStream.title || firstStream.name || 'Stream',
+      name: firstStream.name || 'Unknown Source'
+    });
 
   } catch (error) {
     fastify.log.error(error);
@@ -239,20 +195,22 @@ fastify.get('/health', async (request, reply) => {
 // Root endpoint with API documentation
 fastify.get('/', async (request, reply) => {
   return {
-    name: 'Stremio to M3U8 API',
+    name: 'Stremio to EmbedIn API',
     version: '3.0.0',
-    description: 'Convert Stremio addon streams to M3U8 playlists',
+    description: 'Convert Stremio addon to EmbedIn',
     configured: !!ADDON_BASE_URL,
     endpoints: {
       movie: {
         method: 'GET',
         path: '/movie/{imdb}',
-        example: '/movie/tt32063098'
+        example: '/movie/tt32063098',
+        returns: 'First stream URL with metadata'
       },
       tv: {
         method: 'GET',
         path: '/tv/{imdb}/{season}/{episode}',
-        example: '/tv/tt32063098/1/1'
+        example: '/tv/tt32063098/1/1',
+        returns: 'First stream URL with metadata'
       },
       info: {
         method: 'GET',
