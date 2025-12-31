@@ -105,13 +105,9 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Return the first stream URL
+    // Redirect to the first stream URL
     const firstStream = data.streams[0];
-    return reply.send({
-      url: firstStream.url,
-      title: firstStream.title || firstStream.name || 'Stream',
-      name: firstStream.name || 'Unknown Source'
-    });
+    return reply.redirect(302, firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -150,13 +146,9 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Return the first stream URL
+    // Redirect to the first stream URL
     const firstStream = data.streams[0];
-    return reply.send({
-      url: firstStream.url,
-      title: firstStream.title || firstStream.name || 'Stream',
-      name: firstStream.name || 'Unknown Source'
-    });
+    return reply.redirect(302, firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -195,22 +187,22 @@ fastify.get('/health', async (request, reply) => {
 // Root endpoint with API documentation
 fastify.get('/', async (request, reply) => {
   return {
-    name: 'Stremio to EmbedIn API',
+    name: 'Stremio First Stream URL API',
     version: '3.0.0',
-    description: 'Convert Stremio addon to EmbedIn',
+    description: 'Get the first stream URL from Stremio addon',
     configured: !!ADDON_BASE_URL,
     endpoints: {
       movie: {
         method: 'GET',
         path: '/movie/{imdb}',
         example: '/movie/tt32063098',
-        returns: 'First stream URL with metadata'
+        returns: 'Redirects to the first stream URL'
       },
       tv: {
         method: 'GET',
         path: '/tv/{imdb}/{season}/{episode}',
         example: '/tv/tt32063098/1/1',
-        returns: 'First stream URL with metadata'
+        returns: 'Redirects to the first stream URL'
       },
       info: {
         method: 'GET',
