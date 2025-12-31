@@ -58,7 +58,58 @@ async function initializeAddon(manifestUrl) {
   }
 }
 
-// Helper function to fetch Stremio addon streams
+// Helper function to check if URL is a valid video
+async function isValidVideo(url, acceptedFormats = null) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    
+    // If specific formats requested, check against them
+    if (acceptedFormats && acceptedFormats.length > 0) {
+      return acceptedFormats.some(format => {
+        const formatLower = format.toLowerCase();
+        return contentType.toLowerCase().includes(formatLower) || 
+               url.toLowerCase().includes(`.${formatLower}`);
+      });
+    }
+    
+    // Otherwise check for common video types
+    const isVideo = contentType.startsWith('video/') ||
+                    /\.(mp4|mkv|avi|mov|wmv|flv|webm|m3u8|ts)$/i.test(url);
+    
+    return isVideo;
+  } catch (error) {
+    // Timeout or network error
+    return false;
+  }
+}
+
+// Helper function to find first valid video stream
+async function findValidVideoStream(streams, acceptedFormats = null) {
+  for (const stream of streams) {
+    if (!stream.url) continue;
+    
+    const isValid = await isValidVideo(stream.url, acceptedFormats);
+    if (isValid) {
+      return stream;
+    }
+  }
+  return null;
+}
 async function fetchStremioStreams(streamUrl) {
   try {
     const response = await fetch(streamUrl);
@@ -88,6 +139,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 fastify.get('/movie/:imdb', async (request, reply) => {
   try {
     const { imdb } = request.params;
+    const { format } = request.query;
     
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
@@ -95,6 +147,9 @@ fastify.get('/movie/:imdb', async (request, reply) => {
         error: 'Invalid IMDb ID format. Must be in format: ttXXXXXXX'
       });
     }
+
+    // Parse accepted formats from query param
+    const acceptedFormats = format ? format.split(',').map(f => f.trim()) : null;
 
     const streamUrl = `${ADDON_BASE_URL}/stream/movie/${imdb}.json`;
     const data = await fetchStremioStreams(streamUrl);
@@ -105,9 +160,20 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Redirect to the first stream URL
-    const firstStream = data.streams[0];
-    return reply.redirect(firstStream.url);
+    // Find first valid video stream
+    const validStream = await findValidVideoStream(data.streams, acceptedFormats);
+    
+    if (!validStream) {
+      return reply.code(404).send({
+        error: 'No valid video streams found',
+        message: acceptedFormats 
+          ? `No streams matching formats: ${acceptedFormats.join(', ')}`
+          : 'No accessible video streams found'
+      });
+    }
+
+    // Redirect to the valid stream URL
+    return reply.redirect(validStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -122,6 +188,7 @@ fastify.get('/movie/:imdb', async (request, reply) => {
 fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
   try {
     const { imdb, season, episode } = request.params;
+    const { format } = request.query;
     
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
@@ -137,6 +204,9 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
+    // Parse accepted formats from query param
+    const acceptedFormats = format ? format.split(',').map(f => f.trim()) : null;
+
     const streamUrl = `${ADDON_BASE_URL}/stream/series/${imdb}:${season}:${episode}.json`;
     const data = await fetchStremioStreams(streamUrl);
 
@@ -146,9 +216,20 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Redirect to the first stream URL
-    const firstStream = data.streams[0];
-    return reply.redirect(firstStream.url);
+    // Find first valid video stream
+    const validStream = await findValidVideoStream(data.streams, acceptedFormats);
+    
+    if (!validStream) {
+      return reply.code(404).send({
+        error: 'No valid video streams found',
+        message: acceptedFormats 
+          ? `No streams matching formats: ${acceptedFormats.join(', ')}`
+          : 'No accessible video streams found'
+      });
+    }
+
+    // Redirect to the valid stream URL
+    return reply.redirect(validStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -196,13 +277,19 @@ fastify.get('/', async (request, reply) => {
         method: 'GET',
         path: '/movie/{imdb}',
         example: '/movie/tt32063098',
-        returns: 'Redirects to the first stream URL'
+        queryParams: {
+          format: 'Optional: Comma-separated video formats (e.g., ?format=mkv,mp4)'
+        },
+        returns: 'Redirects to the first valid stream URL'
       },
       tv: {
         method: 'GET',
         path: '/tv/{imdb}/{season}/{episode}',
-        example: '/tv/tt32063098/1/1',
-        returns: 'Redirects to the first stream URL'
+        example: '/tv/tt32063098/1/1?format=mkv',
+        queryParams: {
+          format: 'Optional: Comma-separated video formats (e.g., ?format=mkv,mp4)'
+        },
+        returns: 'Redirects to the first valid stream URL'
       },
       info: {
         method: 'GET',
