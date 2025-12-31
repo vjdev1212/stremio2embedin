@@ -107,7 +107,7 @@ fastify.get('/movie/:imdb', async (request, reply) => {
 
     // Redirect to the first stream URL
     const firstStream = data.streams[0];
-    return reply.redirect(302, firstStream.url);
+    return reply.redirect(firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -148,7 +148,7 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
 
     // Redirect to the first stream URL
     const firstStream = data.streams[0];
-    return reply.redirect(302, firstStream.url);
+    return reply.redirect(firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
