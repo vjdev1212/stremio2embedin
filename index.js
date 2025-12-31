@@ -18,12 +18,12 @@ function getBaseUrlFromManifest(manifestUrl) {
   try {
     // Remove trailing slash if present
     manifestUrl = manifestUrl.trim().replace(/\/$/, '');
-    
+
     // Remove /manifest.json from the end
     if (manifestUrl.endsWith('/manifest.json')) {
       return manifestUrl.replace(/\/manifest\.json$/, '');
     }
-    
+
     throw new Error('Invalid manifest URL. Must end with /manifest.json');
   } catch (error) {
     throw new Error(`Invalid manifest URL format: ${error.message}`);
@@ -35,22 +35,22 @@ async function initializeAddon(manifestUrl) {
   try {
     console.log(`Fetching manifest from: ${manifestUrl}`);
     const response = await fetch(manifestUrl);
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch manifest: ${response.statusText}`);
     }
-    
+
     const manifest = await response.json();
     const baseUrl = getBaseUrlFromManifest(manifestUrl);
-    
+
     ADDON_BASE_URL = baseUrl;
     ADDON_MANIFEST = manifest;
-    
+
     console.log(`✅ Addon configured successfully!`);
     console.log(`   Name: ${manifest.name || 'Unknown'}`);
     console.log(`   Base URL: ${baseUrl}`);
     console.log(`   Version: ${manifest.version || 'Unknown'}`);
-    
+
     return { baseUrl, manifest };
   } catch (error) {
     console.error(`❌ Error initializing addon: ${error.message}`);
@@ -74,7 +74,7 @@ async function fetchStremioStreams(streamUrl) {
 // Middleware to check if addon is configured
 fastify.addHook('preHandler', async (request, reply) => {
   const skipRoutes = ['/', '/health', '/info'];
-  
+
   if (!skipRoutes.includes(request.url) && !ADDON_BASE_URL) {
     reply.code(503).send({
       error: 'Addon not configured',
@@ -88,7 +88,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 fastify.get('/movie/:imdb', async (request, reply) => {
   try {
     const { imdb } = request.params;
-    
+
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
       return reply.code(400).send({
@@ -106,8 +106,9 @@ fastify.get('/movie/:imdb', async (request, reply) => {
     }
 
     // Return the first stream URL
-    const firstStream = data.streams[0];
-    return reply.redirect(firstStream.url);
+    const firstStream = data.streams.find(
+      (stream) => stream.title?.toLowerCase().includes('1080p')
+    ); return reply.redirect(firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -122,7 +123,7 @@ fastify.get('/movie/:imdb', async (request, reply) => {
 fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
   try {
     const { imdb, season, episode } = request.params;
-    
+
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
       return reply.code(400).send({
@@ -147,8 +148,9 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
     }
 
     // Return the first stream URL
-    const firstStream = data.streams[0];
-    return reply.redirect(firstStream.url);
+    const firstStream = data.streams.find(
+      (stream) => stream.title?.toLowerCase().includes('1080p')
+    ); return reply.redirect(firstStream.url);
 
   } catch (error) {
     fastify.log.error(error);
@@ -177,8 +179,8 @@ fastify.get('/info', async (request, reply) => {
 
 // Health check endpoint
 fastify.get('/health', async (request, reply) => {
-  return { 
-    status: 'ok', 
+  return {
+    status: 'ok',
     timestamp: new Date().toISOString(),
     addonConfigured: !!ADDON_BASE_URL
   };
@@ -231,7 +233,7 @@ const start = async () => {
   try {
     // Initialize addon from environment variable
     const manifestUrl = process.env.MANIFEST_URL;
-    
+
     if (manifestUrl) {
       try {
         await initializeAddon(manifestUrl);
@@ -243,10 +245,10 @@ const start = async () => {
       console.warn('⚠️  Warning: MANIFEST_URL environment variable not set');
       console.warn('   Server will start but endpoints will return 503 until configured');
     }
-    
+
     const port = process.env.PORT || 3000;
     const host = process.env.HOST || '0.0.0.0';
-    
+
     await fastify.listen({ port, host });
     console.log(`\n🚀 Server listening on ${host}:${port}`);
     console.log(`📡 API Documentation: http://${host}:${port}/`);
