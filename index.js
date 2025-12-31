@@ -58,58 +58,7 @@ async function initializeAddon(manifestUrl) {
   }
 }
 
-// Helper function to check if URL is a valid video
-async function isValidVideo(url, acceptedFormats = null) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const response = await fetch(url, {
-      method: 'HEAD',
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      return false;
-    }
-    
-    const contentType = response.headers.get('content-type') || '';
-    
-    // If specific formats requested, check against them
-    if (acceptedFormats && acceptedFormats.length > 0) {
-      return acceptedFormats.some(format => {
-        const formatLower = format.toLowerCase();
-        return contentType.toLowerCase().includes(formatLower) || 
-               url.toLowerCase().includes(`.${formatLower}`);
-      });
-    }
-    
-    // Otherwise check for common video types
-    const isVideo = contentType.startsWith('video/') ||
-                    /\.(mp4|mkv|avi|mov|wmv|flv|webm|m3u8|ts)$/i.test(url);
-    
-    return isVideo;
-  } catch (error) {
-    // Timeout or network error
-    return false;
-  }
-}
-
-// Helper function to find first valid video stream
-async function findValidVideoStream(streams, acceptedFormats = null) {
-  for (const stream of streams) {
-    if (!stream.url) continue;
-    
-    const isValid = await isValidVideo(stream.url, acceptedFormats);
-    if (isValid) {
-      return stream;
-    }
-  }
-  return null;
-}
+// Helper function to fetch Stremio addon streams
 async function fetchStremioStreams(streamUrl) {
   try {
     const response = await fetch(streamUrl);
@@ -120,6 +69,177 @@ async function fetchStremioStreams(streamUrl) {
   } catch (error) {
     throw new Error(`Error fetching Stremio addon: ${error.message}`);
   }
+}
+
+// Helper function to generate HTML video player
+function generateVideoPlayerHTML(streamUrl, title = 'Video Player') {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #video-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 18px;
+      text-align: center;
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #error {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ff4444;
+      font-size: 16px;
+      text-align: center;
+      padding: 20px;
+      max-width: 80%;
+    }
+  </style>
+</head>
+<body>
+  <div id="video-container">
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>Loading video...</div>
+    </div>
+    <div id="error">
+      <div style="font-size: 48px; margin-bottom: 10px;">⚠️</div>
+      <div id="error-message">Failed to load video</div>
+    </div>
+    <video id="video" 
+           controls 
+           autoplay 
+           playsinline 
+           preload="auto"
+           controlsList="nodownload">
+      <source src="${streamUrl}" type="video/mp4">
+      <source src="${streamUrl}" type="video/webm">
+      <source src="${streamUrl}" type="application/x-mpegURL">
+      Your browser does not support the video tag.
+    </video>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const errorMessage = document.getElementById('error-message');
+
+    // Hide loading when video can play
+    video.addEventListener('loadeddata', () => {
+      loading.style.display = 'none';
+    });
+
+    video.addEventListener('canplay', () => {
+      loading.style.display = 'none';
+    });
+
+    // Show error if video fails to load
+    video.addEventListener('error', (e) => {
+      loading.style.display = 'none';
+      error.style.display = 'block';
+      
+      const errorCode = video.error ? video.error.code : 'unknown';
+      const errorText = video.error ? video.error.message : 'Unknown error';
+      
+      errorMessage.innerHTML = \`Failed to load video<br><small style="font-size: 12px; opacity: 0.7;">Error: \${errorText}</small>\`;
+    });
+
+    // Prevent context menu on long press
+    video.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      return false;
+    });
+  </script>
+</body>
+</html>`;
+}
+
+// Helper function to convert streams to M3U8 format
+function streamsToM3U8(streams, title = 'Playlist') {
+  let m3u8Content = '#EXTM3U\n';
+  m3u8Content += '#EXT-X-VERSION:3\n\n';
+
+  if (!streams || streams.length === 0) {
+    return m3u8Content;
+  }
+
+  streams.forEach((stream, index) => {
+    // Extract quality info from title or name
+    const streamTitle = stream.title || stream.name || `Stream ${index + 1}`;
+    const streamName = stream.name || 'Unknown Source';
+    
+    // Parse quality and size from title
+    const qualityMatch = streamTitle.match(/(\d+p)/);
+    const sizeMatch = streamTitle.match(/([\d.]+GB)/);
+    const quality = qualityMatch ? qualityMatch[1] : 'Unknown';
+    const size = sizeMatch ? sizeMatch[1] : '';
+    
+    // Determine bandwidth based on quality (rough estimates)
+    let bandwidth = 5000000; // default 5Mbps
+    if (quality.includes('2160p') || quality.includes('4K')) {
+      bandwidth = 20000000; // 20Mbps for 4K
+    } else if (quality.includes('1080p')) {
+      bandwidth = 8000000; // 8Mbps for 1080p
+    } else if (quality.includes('720p')) {
+      bandwidth = 5000000; // 5Mbps for 720p
+    } else if (quality.includes('480p')) {
+      bandwidth = 2500000; // 2.5Mbps for 480p
+    }
+
+    // Add stream info
+    const displayName = `${streamName} - ${quality}${size ? ' - ' + size : ''}`;
+    
+    m3u8Content += `#EXTINF:-1 tvg-name="${displayName}" group-title="${streamName}",${displayName}\n`;
+    m3u8Content += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}\n`;
+    m3u8Content += `${stream.url}\n\n`;
+  });
+
+  return m3u8Content;
 }
 
 // Middleware to check if addon is configured
@@ -148,9 +268,6 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Parse accepted formats from query param
-    const acceptedFormats = format ? format.split(',').map(f => f.trim()) : null;
-
     const streamUrl = `${ADDON_BASE_URL}/stream/movie/${imdb}.json`;
     const data = await fetchStremioStreams(streamUrl);
 
@@ -160,20 +277,22 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Find first valid video stream
-    const validStream = await findValidVideoStream(data.streams, acceptedFormats);
-    
-    if (!validStream) {
-      return reply.code(404).send({
-        error: 'No valid video streams found',
-        message: acceptedFormats 
-          ? `No streams matching formats: ${acceptedFormats.join(', ')}`
-          : 'No accessible video streams found'
-      });
+    // Check if format is m3u8 (return playlist)
+    if (format === 'm3u8') {
+      const m3u8Content = streamsToM3U8(data.streams, `Movie ${imdb}`);
+      return reply
+        .header('Content-Type', 'application/vnd.apple.mpegurl')
+        .header('Content-Disposition', `attachment; filename="${imdb}.m3u8"`)
+        .send(m3u8Content);
     }
 
-    // Redirect to the valid stream URL
-    return reply.redirect(validStream.url);
+    // Default: Return HTML video player with first stream
+    const firstStream = data.streams[0];
+    const html = generateVideoPlayerHTML(firstStream.url, `Movie ${imdb}`);
+    
+    return reply
+      .header('Content-Type', 'text/html')
+      .send(html);
 
   } catch (error) {
     fastify.log.error(error);
@@ -204,9 +323,6 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Parse accepted formats from query param
-    const acceptedFormats = format ? format.split(',').map(f => f.trim()) : null;
-
     const streamUrl = `${ADDON_BASE_URL}/stream/series/${imdb}:${season}:${episode}.json`;
     const data = await fetchStremioStreams(streamUrl);
 
@@ -216,20 +332,28 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Find first valid video stream
-    const validStream = await findValidVideoStream(data.streams, acceptedFormats);
-    
-    if (!validStream) {
-      return reply.code(404).send({
-        error: 'No valid video streams found',
-        message: acceptedFormats 
-          ? `No streams matching formats: ${acceptedFormats.join(', ')}`
-          : 'No accessible video streams found'
-      });
+    // Check if format is m3u8 (return playlist)
+    if (format === 'm3u8') {
+      const m3u8Content = streamsToM3U8(
+        data.streams, 
+        `TV Show ${imdb} S${season}E${episode}`
+      );
+      return reply
+        .header('Content-Type', 'application/vnd.apple.mpegurl')
+        .header('Content-Disposition', `attachment; filename="${imdb}_S${season}E${episode}.m3u8"`)
+        .send(m3u8Content);
     }
 
-    // Redirect to the valid stream URL
-    return reply.redirect(validStream.url);
+    // Default: Return HTML video player with first stream
+    const firstStream = data.streams[0];
+    const html = generateVideoPlayerHTML(
+      firstStream.url, 
+      `TV Show ${imdb} S${season}E${episode}`
+    );
+    
+    return reply
+      .header('Content-Type', 'text/html')
+      .send(html);
 
   } catch (error) {
     fastify.log.error(error);
@@ -268,9 +392,9 @@ fastify.get('/health', async (request, reply) => {
 // Root endpoint with API documentation
 fastify.get('/', async (request, reply) => {
   return {
-    name: 'Stremio First Stream URL API',
+    name: 'Stremio to M3U8 API',
     version: '3.0.0',
-    description: 'Get the first stream URL from Stremio addon',
+    description: 'Convert Stremio addon streams to M3U8 playlists',
     configured: !!ADDON_BASE_URL,
     endpoints: {
       movie: {
@@ -278,18 +402,18 @@ fastify.get('/', async (request, reply) => {
         path: '/movie/{imdb}',
         example: '/movie/tt32063098',
         queryParams: {
-          format: 'Optional: Comma-separated video formats (e.g., ?format=mkv,mp4)'
+          format: 'Optional: "m3u8" for playlist file (default: HTML video player)'
         },
-        returns: 'Redirects to the first valid stream URL'
+        returns: 'HTML video player page (or M3U8 with ?format=m3u8)'
       },
       tv: {
         method: 'GET',
         path: '/tv/{imdb}/{season}/{episode}',
-        example: '/tv/tt32063098/1/1?format=mkv',
+        example: '/tv/tt32063098/1/1',
         queryParams: {
-          format: 'Optional: Comma-separated video formats (e.g., ?format=mkv,mp4)'
+          format: 'Optional: "m3u8" for playlist file (default: HTML video player)'
         },
-        returns: 'Redirects to the first valid stream URL'
+        returns: 'HTML video player page (or M3U8 with ?format=m3u8)'
       },
       info: {
         method: 'GET',
