@@ -13,6 +13,103 @@ await fastify.register(cors, {
 let ADDON_BASE_URL = null;
 let ADDON_MANIFEST = null;
 
+// MIME type mappings
+const MIME_TYPE_MAP = {
+  'mp4': 'video/mp4',
+  'webm': 'video/webm',
+  'mkv': 'video/x-matroska',
+  'avi': 'video/x-msvideo',
+  'mov': 'video/quicktime',
+  'flv': 'video/x-flv',
+  'wmv': 'video/x-ms-wmv',
+  'mpeg': 'video/mpeg',
+  'mpg': 'video/mpeg',
+  '3gp': 'video/3gpp',
+  'ogv': 'video/ogg',
+  'ts': 'video/mp2t',
+  'm3u8': 'application/x-mpegURL',
+  'hls': 'application/x-mpegURL'
+};
+
+// Helper function to get MIME type from format
+function getMimeType(format) {
+  return MIME_TYPE_MAP[format.toLowerCase()] || null;
+}
+
+// Helper function to detect MIME type using HEAD request
+async function detectStreamMimeType(stream) {
+  // Check if stream has explicit MIME type
+  if (stream.mimeType) {
+    return stream.mimeType.toLowerCase();
+  }
+
+  const url = stream.url || '';
+  
+  try {
+    // Make HEAD request to get Content-Type
+    const response = await fetch(url, { 
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000) // 5 second timeout
+    });
+    
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType) {
+      // Extract MIME type (remove parameters like charset)
+      const mimeType = contentType.split(';')[0].trim().toLowerCase();
+      return mimeType;
+    }
+  } catch (error) {
+    // If HEAD request fails, fall back to URL analysis
+    fastify.log.warn(`HEAD request failed for ${url}: ${error.message}`);
+  }
+
+  // Fallback: Try to detect from URL extension
+  const extensionMatch = url.match(/\.([a-z0-9]+)(?:\?|$)/i);
+  
+  if (extensionMatch) {
+    const extension = extensionMatch[1].toLowerCase();
+    const mimeType = getMimeType(extension);
+    if (mimeType) return mimeType;
+  }
+
+  // Check for HLS/M3U8 indicators
+  if (url.includes('.m3u8') || url.includes('m3u8')) {
+    return 'application/x-mpegurl';
+  }
+
+  // Default to mp4
+  return 'video/mp4';
+}
+
+// Helper function to filter streams by format
+async function filterStreamsByFormat(streams, format = 'mp4') {
+  const targetMimeType = getMimeType(format);
+  
+  if (!targetMimeType) {
+    throw new Error(`Unsupported format: ${format}. Supported formats: ${Object.keys(MIME_TYPE_MAP).join(', ')}`);
+  }
+
+  // Check each stream's MIME type via HEAD request
+  const streamChecks = await Promise.allSettled(
+    streams.map(async (stream) => {
+      const streamMimeType = await detectStreamMimeType(stream);
+      return {
+        stream,
+        mimeType: streamMimeType,
+        matches: streamMimeType === targetMimeType
+      };
+    })
+  );
+
+  // Filter successful checks that match the target MIME type
+  const filtered = streamChecks
+    .filter(result => result.status === 'fulfilled' && result.value.matches)
+    .map(result => result.value.stream);
+
+  return filtered;
+}
+
 // Helper function to extract base URL from manifest URL
 function getBaseUrlFromManifest(manifestUrl) {
   try {
@@ -88,6 +185,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 fastify.get('/movie/:imdb', async (request, reply) => {
   try {
     const { imdb } = request.params;
+    const { format = 'mp4' } = request.query;
     
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
@@ -105,8 +203,28 @@ fastify.get('/movie/:imdb', async (request, reply) => {
       });
     }
 
-    // Redirect to the first stream URL
-    const firstStream = data.streams[0];
+    // Filter streams by format
+    let filteredStreams;
+    try {
+      filteredStreams = await filterStreamsByFormat(data.streams, format);
+    } catch (error) {
+      return reply.code(400).send({
+        error: error.message,
+        availableFormats: Object.keys(MIME_TYPE_MAP)
+      });
+    }
+
+    if (filteredStreams.length === 0) {
+      return reply.code(404).send({
+        error: `No streams found with format: ${format}`,
+        hint: 'Try a different format',
+        availableFormats: Object.keys(MIME_TYPE_MAP),
+        totalStreamsFound: data.streams.length
+      });
+    }
+
+    // Redirect to the first filtered stream URL
+    const firstStream = filteredStreams[0];
     return reply.redirect(firstStream.url);
 
   } catch (error) {
@@ -122,6 +240,7 @@ fastify.get('/movie/:imdb', async (request, reply) => {
 fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
   try {
     const { imdb, season, episode } = request.params;
+    const { format = 'mp4' } = request.query;
     
     // Validate IMDb ID format
     if (!imdb.match(/^tt\d+$/)) {
@@ -146,8 +265,28 @@ fastify.get('/tv/:imdb/:season/:episode', async (request, reply) => {
       });
     }
 
-    // Redirect to the first stream URL
-    const firstStream = data.streams[0];
+    // Filter streams by format
+    let filteredStreams;
+    try {
+      filteredStreams = await filterStreamsByFormat(data.streams, format);
+    } catch (error) {
+      return reply.code(400).send({
+        error: error.message,
+        availableFormats: Object.keys(MIME_TYPE_MAP)
+      });
+    }
+
+    if (filteredStreams.length === 0) {
+      return reply.code(404).send({
+        error: `No streams found with format: ${format}`,
+        hint: 'Try a different format',
+        availableFormats: Object.keys(MIME_TYPE_MAP),
+        totalStreamsFound: data.streams.length
+      });
+    }
+
+    // Redirect to the first filtered stream URL
+    const firstStream = filteredStreams[0];
     return reply.redirect(firstStream.url);
 
   } catch (error) {
@@ -169,6 +308,7 @@ fastify.get('/info', async (request, reply) => {
       description: ADDON_MANIFEST.description || 'No description',
       baseUrl: ADDON_BASE_URL
     } : null,
+    supportedFormats: Object.keys(MIME_TYPE_MAP),
     environment: {
       manifestUrl: process.env.MANIFEST_URL || 'Not set'
     }
@@ -187,27 +327,33 @@ fastify.get('/health', async (request, reply) => {
 // Root endpoint with API documentation
 fastify.get('/', async (request, reply) => {
   return {
-    name: 'Stremio First Stream URL API',
-    version: '3.0.0',
-    description: 'Get the first stream URL from Stremio addon',
+    name: 'Stremio Stream Redirect API',
+    version: '3.1.0',
+    description: 'Get and filter stream URLs from Stremio addon by format',
     configured: !!ADDON_BASE_URL,
     endpoints: {
       movie: {
         method: 'GET',
         path: '/movie/{imdb}',
-        example: '/movie/tt32063098',
-        returns: 'Redirects to the first stream URL'
+        example: '/movie/tt32063098?format=mp4',
+        queryParams: {
+          format: 'Optional: Video format (default: mp4). Example: mp4, webm, mkv, m3u8'
+        },
+        returns: 'Redirects to the first stream URL matching the format'
       },
       tv: {
         method: 'GET',
         path: '/tv/{imdb}/{season}/{episode}',
-        example: '/tv/tt32063098/1/1',
-        returns: 'Redirects to the first stream URL'
+        example: '/tv/tt32063098/1/1?format=mp4',
+        queryParams: {
+          format: 'Optional: Video format (default: mp4). Example: mp4, webm, mkv, m3u8'
+        },
+        returns: 'Redirects to the first stream URL matching the format'
       },
       info: {
         method: 'GET',
         path: '/info',
-        description: 'Get current addon configuration'
+        description: 'Get current addon configuration and supported formats'
       },
       health: {
         method: 'GET',
@@ -215,6 +361,7 @@ fastify.get('/', async (request, reply) => {
         description: 'Health check endpoint'
       }
     },
+    supportedFormats: Object.keys(MIME_TYPE_MAP),
     setup: {
       required: 'Set MANIFEST_URL environment variable',
       examples: [
